@@ -1,0 +1,14 @@
+{
+    "name": "com.rslib_u3d.f8uisystem",
+    "displayName": "RSLibU3D.F8UISystem",
+    "author": {
+        "name": "andyhebear",
+        "url": "https://127.0.0.1/rs/f8uisystem"
+    },
+    "version": "1.1.1",
+    "unity": "2021.3",
+    "description": "A lightweight, simple ui framework library for Unity.",
+    "keywords": [ "ui","ui system", "ui framework", "UI Manager" ],
+    "license": "MIT",
+    "dependencies": {}
+}

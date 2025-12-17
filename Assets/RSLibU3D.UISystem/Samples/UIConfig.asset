@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6ffda73a9a3bc443b6d731b68ac9715, type: 3}
+  m_Name: UIConfig
+  m_EditorClassIdentifier: 
+  FormConfigs:
+  - FormName: UIPopup
+    Layer: 2
+    IsAddToStack: 0
+    IsPermanent: 1
+    PrefabPath: UIPopup.prefab
+    LoadType: 0
+    AssetBundleName: 
+  - FormName: UIInputPopup
+    Layer: 2
+    IsAddToStack: 0
+    IsPermanent: 1
+    PrefabPath: UIInputPopup.prefab
+    LoadType: 0
+    AssetBundleName: 
+  - FormName: UINotifyLayer
+    Layer: 5
+    IsAddToStack: 0
+    IsPermanent: 1
+    PrefabPath: UINotifyLayer.prefab
+    LoadType: 0
+    AssetBundleName: 
+  - FormName: TestUIMainForm
+    Layer: 1
+    IsAddToStack: 1
+    IsPermanent: 0
+    PrefabPath: TestUIMainForm.prefab
+    LoadType: 0
+    AssetBundleName: 
+  - FormName: TestUIMainForm2
+    Layer: 1
+    IsAddToStack: 1
+    IsPermanent: 0
+    PrefabPath: TestUIMainForm2.prefab
+    LoadType: 0
+    AssetBundleName: 
