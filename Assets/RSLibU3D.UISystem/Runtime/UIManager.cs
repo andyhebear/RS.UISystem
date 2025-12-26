@@ -2,9 +2,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 #if ADDRESSABLES_SUPPORT
 //#define ADDRESSABLES_ENABLED
@@ -25,31 +27,39 @@ namespace RS.Unity3DLib.UISystem
         public static UIManager Instance { get; private set; }
         public Camera getUICamera() { return _UICamera; }
         public Color getBackSideColor() { return Color.black; }
-        public Vector2 getDesignResolution() { return new Vector2(1920,1080); }     
-   
+        public Vector2 getDesignResolution() { return new Vector2(1920,1080); }
+
         /// <summary>
         /// 动态注册预设资源路径
         /// </summary>
-        private Dictionary<string,UIFormConfig> _uiFormConfigs = new Dictionary<string,UIFormConfig>();   
+        private Dictionary<string,UIFormConfig> _uiFormConfigs = new Dictionary<string,UIFormConfig>();
         [Header("基础配置")]
         [SerializeField] private UIConfig _uiConfig;
-       
-        [SerializeField] private Transform _UILayers; // 绑定UILayers节点
+
+        [SerializeField] private Canvas _UILayers; // 绑定UILayers节点
         [SerializeField] private Camera _UICamera; // 绑定UICamera节点
         [SerializeField] private UIResourceLoadType _defaultLoadType = UIResourceLoadType.Resources;
 
         [Header("适配配置")]
         [SerializeField] private AdaptMode _defaultAdaptMode = AdaptMode.BlackBars;
+        [Header("黑边模式的填充色")]
+        [SerializeField] private Color _backSideColor = Color.black;
+        [Header("设计分辨率")]
+        [SerializeField] private Vector2 _referenceResolution = new(1920,1080); // 设计分辨率
+        [Header("设计camera Depth排序")]
+        [SerializeField] private int _cameraDepth = 100;
+        [Header("设计canvas排序")]
+        [SerializeField] private int _canvasSortingOrder = 100;
         [Header("SafeArea配置")]
         [SerializeField] private bool _enableSafeArea = true; // 是否启用SafeArea适配
         // 核心数据结构
         private readonly Dictionary<UILayer,Stack<string>> _layerFormStacks = new Dictionary<UILayer,Stack<string>>(); // 层级独立栈
-        private readonly Dictionary<string,UIForm> _loadedForms = new Dictionary<string,UIForm>(); // 已加载界面缓存
+        private readonly Dictionary<string,UIFormBase> _loadedForms = new Dictionary<string,UIFormBase>(); // 已加载界面缓存
         private readonly Dictionary<UILayer,Transform> _layerParents = new Dictionary<UILayer,Transform>(); // 层级父节点缓存
         private readonly Dictionary<UIResourceLoadType,IUIResourceLoader> _resourceLoaders = new Dictionary<UIResourceLoadType,IUIResourceLoader>(); // 资源加载器缓存
-
+        private readonly Dictionary<string,bool> _loadingForms = new Dictionary<string,bool>();
         private UIPool _uiPool;
-        private UIRootAdapter _uiRootAdapter;
+        private UICanvasAdapter _uiRootAdapter;
         private IUIResourceLoader _currentResourceLoader;
 
         private void Awake() {
@@ -60,6 +70,7 @@ namespace RS.Unity3DLib.UISystem
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            CoroutineHelper.Initialize(this,System.Threading.Thread.CurrentThread.ManagedThreadId);
             InitUICamera();
             // 初始化层级父节点
             InitLayerParents();
@@ -82,8 +93,15 @@ namespace RS.Unity3DLib.UISystem
             // 初始化EventSystem
             InitEventSystem();
         }
+        private void OnDestroy() {
+            // 清空事件总线
+            if (Instance != this) {
+                UIEventBus.ClearAllEvents();
+                Instance = null;
+            }
+        }
         private void Start() {
-            ShowForm<UINotifyLayer>();
+            ShowForm<UIFormNotify>();
         }
         private void InitUICamera() {
             if (_UICamera == null) {
@@ -96,6 +114,7 @@ namespace RS.Unity3DLib.UISystem
                 if (_UICamera == null) {
                     _UICamera = co.gameObject.AddComponent<Camera>();
                 }
+
             }
         }
         /// <summary>
@@ -103,19 +122,21 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         private void InitLayerParents() {
             if (_UILayers == null) {
-                _UILayers = this.transform.Find("UILayers");
+                _UILayers = this.transform.Find("UILayers")?.GetComponent<Canvas>();
                 if (_UILayers == null) {
                     GameObject ul = new GameObject("UILayers",typeof(RectTransform),typeof(Canvas),typeof(CanvasScaler),typeof(GraphicRaycaster));
                     ul.layer = LayerMask.NameToLayer("UI");
                     ul.transform.SetParent(this.transform);
                     ul.transform.localPosition = Vector3.zero;
-                    _UILayers = ul.transform;
+                    _UILayers = ul.GetComponent<Canvas>();
+                    _UILayers.sortingOrder = _canvasSortingOrder;
                 }
             }
-
-            foreach (UILayer layer in Enum.GetValues(typeof(UILayer))) {
+            var uilayers = Enum.GetValues(typeof(UILayer));
+            float maxDistance = uilayers.Length * 10f;
+            foreach (UILayer layer in uilayers) {
                 string layerName = layer.ToString();
-                Transform child = _UILayers.Find(layerName);
+                Transform child = _UILayers.transform.Find(layerName);
                 if (child != null) {
                     _layerParents.Add(layer,child);
                 }
@@ -123,9 +144,9 @@ namespace RS.Unity3DLib.UISystem
                     //Debug.LogError($"UIManager: UILayers下未找到层级节点 {layerName}");
                     GameObject lay = new GameObject(layerName,typeof(RectTransform));
                     lay.layer = LayerMask.NameToLayer("UI");
-                    lay.transform.SetParent(_UILayers);
+                    lay.transform.SetParent(_UILayers.transform);
                     child = lay.transform;
-                    child.localPosition = new Vector3(0f,0f,((int)layer + 1f) * 100f);
+                    child.localPosition = new Vector3(0f,0f,maxDistance - ((int)layer * 10f));
                     _layerParents.Add(layer,child);
                 }
                 RectTransform rectTrans = child.GetComponent<RectTransform>();
@@ -173,10 +194,10 @@ namespace RS.Unity3DLib.UISystem
                 _UICamera.backgroundColor = Color.clear;
                 _UICamera.cullingMask = 1 << LayerMask.NameToLayer("UI");
                 _UICamera.orthographic = true;
-                _UICamera.depth = 100;
+                _UICamera.depth = _cameraDepth;
                 //
-                _UICamera.nearClipPlane = 0.3f;
-                _UICamera.farClipPlane = 1000f;
+                _UICamera.nearClipPlane = 1f;
+                _UICamera.farClipPlane = 500f;
                 _UICamera.transform.localPosition = new Vector3(0,0,-100f);
                 //cam.nearClipPlane = -50f;
                 //cam.farClipPlane = 50f;
@@ -197,12 +218,13 @@ namespace RS.Unity3DLib.UISystem
                 //_UICamera.orthographic = true;
                 //_UICamera.clearFlags = CameraClearFlags.Depth;
             }
-            _uiRootAdapter = _UILayers.GetComponent<UIRootAdapter>();
+            _uiRootAdapter = _UILayers.GetComponent<UICanvasAdapter>();
             if (_uiRootAdapter == null) {
-                _uiRootAdapter = _UILayers.gameObject.AddComponent<UIRootAdapter>();
+                _uiRootAdapter = _UILayers.gameObject.AddComponent<UICanvasAdapter>();
             }
-
-            // 配置适配参数
+            // 配置适配参数\
+            _uiRootAdapter._backSideColor = this._backSideColor;
+            _uiRootAdapter._referenceResolution = this._referenceResolution;
             _uiRootAdapter.SwitchAdaptMode(_defaultAdaptMode,_UICamera);
             _uiRootAdapter.enabled = true;
 
@@ -218,6 +240,52 @@ namespace RS.Unity3DLib.UISystem
                 eventSystemObj.AddComponent<StandaloneInputModule>();
                 DontDestroyOnLoad(eventSystemObj);
             }
+        }
+        /// <summary>
+        /// 初始化场景监听
+        /// </summary>
+        private void InitSceneListener() {
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        /// <summary>
+        /// 场景卸载回调
+        /// </summary>
+        private void OnSceneUnloaded(Scene scene) {
+            //// 回收非永久UI
+            //List<string> formsToRemove = new List<string>();
+            //foreach (var kvp in _loadedForms) {
+            //    if (!kvp.Value.Config.IsPermanent) {
+            //        formsToRemove.Add(kvp.Key);
+            //    }
+            //}
+
+            //foreach (string formName in formsToRemove) {
+            //    CloseForm(formName,true);
+            //}
+
+            //// 清空栈和加载状态
+            //foreach (var stack in _layerFormStacks.Values) {
+            //    stack.Clear();
+            //}
+            //_loadingForms.Clear();
+            //UIEventBus.ClearAllEvents();
+        }
+
+        /// <summary>
+        /// 场景加载回调
+        /// </summary>
+        private void OnSceneLoaded(Scene scene,LoadSceneMode mode) {
+            //// 重新适配SafeArea           
+            //_uiRootAdapter?.RefreshSafeArea();
+            //// 加载场景默认UI
+            //List<string> defaultForms = UIConfig.GetSceneDefaultForms(scene.name);
+            //foreach (string formName in defaultForms) {
+            //    ShowForm(formName);
+            //}
         }
         /// <summary>
         /// 根据名称获取UIFormConfig
@@ -286,7 +354,7 @@ namespace RS.Unity3DLib.UISystem
         /// 切换UI适配模式
         /// </summary>
         public void SwitchUIAdaptMode(AdaptMode newMode) {
-            _uiRootAdapter?.SwitchAdaptMode(newMode);
+            _uiRootAdapter?.SwitchAdaptMode(newMode,_UICamera);
         }
 
         /// <summary>
@@ -299,148 +367,252 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 显示界面（泛型版本）
         /// </summary>
-        public void ShowForm<T>(object data = null,Action onComplete = null) where T : UIForm {
-            ShowForm(typeof(T).Name,data,onComplete);
+        public void ShowForm<T>(object data = null,Action onComplete = null) where T : UIFormBase {
+            // 检查配置
+            Type formType = typeof(T).GetType();
+            string formName = typeof(T).Name;
+            UIFormConfig config = GetFormByUIFormConfigRegistor(formName);
+            if (config == null) {
+
+                onComplete?.Invoke();
+                return;
+            }
+            else {
+                //todo:动态根据泛型类型属性查找
+                //UIFormDetailAttribute attribute = formType.GetCustomAttribute<UIFormDetailAttribute>(inherit: false);
+                //if (attribute == null) {
+                //    onComplete?.Invoke();
+                //    return;
+                //}
+                ////创建uiconfig并注册到
+                //UIFormConfig cofig = new UIFormConfig();
+                ShowForm(typeof(T).Name,data,onComplete);
+            }
         }
 
         /// <summary>
-        /// 显示界面（核心方法）
+        /// 显示界面（核心方法-名称版）
         /// </summary>
-        public void ShowForm(string formName,object data = null,Action onComplete = null) {           
+        public void ShowForm(string formName,object data = null,Action onComplete = null) {
             // 检查配置
             UIFormConfig config = GetFormByUIFormConfigRegistor(formName);
             if (config == null) {
                 onComplete?.Invoke();
                 return;
             }
-
             // 检查是否已加载
-            if (_loadedForms.TryGetValue(formName,out UIForm form)) {
-                ShowLoadedForm(form,config,data,onComplete);
+            if (_loadedForms.TryGetValue(formName,out UIFormBase loadedForm)) {
+                if (loadedForm.CurrentState == UIFormState.Destroyed) {
+                    _loadedForms.Remove(formName);
+                    TryGetFromPoolAndShow(formName,config,data,onComplete);
+                }
+                else {
+                    ShowLoadedForm(loadedForm,loadedForm.Config,data,onComplete);
+                }
                 return;
             }
 
-            // 从对象池获取
-            GameObject formObj = _uiPool.GetForm(formName);
-            if (formObj != null) {
-                form = formObj.GetComponent<UIForm>();
-                if (form != null) {
-                    form.Init(config);
-                    _loadedForms.Add(formName,form);
-                    ShowLoadedForm(form,config,data,onComplete);
-                    return;
-                }
-                else {
-                    Destroy(formObj);
+            // 检查是否正在加载
+            if (_loadingForms.ContainsKey(formName)) {
+                Debug.LogWarning($"界面 {formName} 正在加载中，请勿重复调用");
+                onComplete?.Invoke();
+                return;
+            }
+
+            // 加载并显示
+            TryGetFromPoolAndShow(formName,config,data,onComplete);
+
+        }
+        private void TryGetFromPoolAndShow(string formName,UIFormConfig config,object data,Action onComplete) {
+            if (config.Lifecycle != UIFormLifecycle.IsPermanent) {
+                GameObject formObj = _uiPool.GetForm(formName);
+                if (formObj != null) {
+                    UIFormBase form = formObj.GetComponent<UIFormBase>();
+                    if (form != null) {
+                        form.Init(config,data,true);
+                        form._setFormState(UIFormState.Loaded);
+                        _loadedForms[formName] = form;
+                        ShowLoadedForm(form,config,data,onComplete);
+                        return;
+                    }
+                    else {
+                        Destroy(formObj);
+                    }
                 }
             }
+            LoadAndShowForm(formName,data,onComplete);
+        }
+        /// <summary>
+        /// 加载并显示界面
+        /// </summary>
+        private void LoadAndShowForm(string formName,object data,Action onComplete) {
+            UIFormConfig config = GetFormByUIFormConfigRegistor(formName);
+            if (config == null) {
+                Debug.LogError($"未找到界面配置：{formName}");
+                onComplete?.Invoke();
+                return;
+            }
+
+            // 显示加载界面
+            if (config.ShowLoading) {
+                ShowForm<UIFormLoading>(null,() => {
+                    GetForm<UIFormLoading>()?.UpdateProgress(0.2f,"加载界面中...");
+                });
+            }
+
+            // 标记为加载中
+            _loadingForms.Add(formName,true);
 
             // 异步加载预制体
             LoadUIPrefabAsync(config,(prefab) => {
                 if (prefab == null) {
+                    if (config.ShowLoading) {
+                        CloseForm<UIFormLoading>();
+                    }
+                    _loadingForms.Remove(formName);
                     onComplete?.Invoke();
                     return;
                 }
 
                 // 实例化界面
-                GameObject newFormObj = Instantiate(prefab);
-                newFormObj.name = formName;
-                UIForm newForm = newFormObj.GetComponent<UIForm>();
-                if (newForm == null) {
-                    Destroy(newFormObj);
-                    Debug.LogError($"预制体 {formName} 未挂载 UIForm 子类脚本");
+                GameObject formObj = Instantiate(prefab,GetLayerParent(config.Layer));
+                formObj.name = formName;
+                UIFormBase form = formObj.GetComponent<UIFormBase>();
+                if (form == null) {
+                    Debug.LogError($"界面预制体 {formName} 未挂载UIForm脚本");
+                    Destroy(formObj);
+                    if (config.ShowLoading) {
+                        CloseForm<UIFormLoading>();
+                    }
+                    _loadingForms.Remove(formName);
                     onComplete?.Invoke();
                     return;
                 }
 
-                // 初始化并显示
-                newForm.Init(config);
-                _loadedForms.Add(formName,newForm);
-                ShowLoadedForm(newForm,config,data,onComplete);
+                // 初始化界面
+                form.Init(config,data,false);
+                form._setFormState(UIFormState.Loaded);
+                _loadedForms[formName] = form;
+
+                // 隐藏加载界面并显示目标界面
+                if (config.ShowLoading) {
+                    CloseForm<UIFormLoading>(() => {
+                        ShowLoadedForm(form,config,data,onComplete);
+                    });
+                }
+                else {
+                    ShowLoadedForm(form,config,data,onComplete);
+                }
+
+                _loadingForms.Remove(formName);
             },(error) => {
-                Debug.LogError(error);
+                Debug.LogError($"加载界面 {formName} 失败：{error}");
+                if (config.ShowLoading) CloseForm<UIFormLoading>();
+                _loadingForms.Remove(formName);
                 onComplete?.Invoke();
             });
         }
+
+
         /// <summary>
         /// 从配置界面中与注册界面中根据名称获取
         /// </summary>
         /// <param name="formName"></param>
         /// <returns></returns>
-        private UIFormConfig GetFormByUIFormConfigRegistor(string formName) {           
+        private UIFormConfig GetFormByUIFormConfigRegistor(string formName) {
+
+            if (string.IsNullOrEmpty(formName)) {
+                Debug.LogError("界面名称为空");
+                return null;
+            }
             UIFormConfig cf = null;
-            _uiFormConfigs.TryGetValue(formName,out cf);             
+            _uiFormConfigs.TryGetValue(formName,out cf);
             if (cf != null) {
                 return cf;
             }
             cf = _uiConfig.GetFormConfig(formName);
             return cf;
         }
-
-        public void CloseForm<T>(Action onComplete = null) where T : UIForm {
+        /// <summary>
+        /// 关闭界面(泛型版)
+        /// </summary>
+        public void CloseForm<T>(Action onComplete = null) where T : UIFormBase {
             CloseForm(typeof(T).Name,onComplete);
         }
         /// <summary>
-        /// 关闭界面
+        /// 关闭界面(核心-名称版)
         /// </summary>
         public void CloseForm(string formName,Action onComplete = null) {
-            if (!_loadedForms.TryGetValue(formName,out UIForm form)) {
+            if (!_loadedForms.TryGetValue(formName,out UIFormBase form)) {
                 Debug.LogWarning($"未加载界面：{formName}");
                 onComplete?.Invoke();
                 return;
             }
 
             UIFormConfig config = form.Config;
-            Stack<string> targetStack = _layerFormStacks[config.Layer];
-
+            Stack<string> targetStack = _layerFormStacks[config.Layer]; // 仅操作当前层级的栈
+            bool isDestroy = config.Lifecycle == UIFormLifecycle.AutoDestroy; // 标记是否需要销毁
             // 隐藏界面
-            form.Hide(false,() => {
-                // 出栈并显示上一个界面
-                if (config.IsAddToStack && targetStack.Count > 0) {
+            form.Hide(isDestroy,() => {
+                // 检查是否还有其他显示中的界面在当前层级
+                bool hasOtherShowingForms = false;
+                foreach (var loadedForm in _loadedForms.Values) {
+                    if (loadedForm.IsShowing && loadedForm.Config.Layer == config.Layer && loadedForm.FormName != formName) {
+                        hasOtherShowingForms = true;
+                        break;
+                    }
+                }
+
+                // 如果当前层级没有其他显示中的界面，并且栈不为空，则显示栈顶界面
+                if (!hasOtherShowingForms && targetStack.Count > 0) {
                     string prevFormName = targetStack.Pop();
                     ShowForm(prevFormName,null,onComplete);
                 }
                 else {
                     onComplete?.Invoke();
                 }
-
-                // 回收至对象池（非永久界面）
-                if (!config.IsPermanent) {
-                    _uiPool.RecycleForm(form.gameObject,formName);
-                    _loadedForms.Remove(formName);
+                // 根据生命周期策略处理后续逻辑
+                switch (config.Lifecycle) {
+                    case UIFormLifecycle.IsPermanent:
+                        // 常驻界面：仅隐藏，保留在_loadedForms中
+                        break;
+                    case UIFormLifecycle.AutoRecycle:
+                        // 回收至对象池
+                        form.Recycle();
+                        _uiPool.RecycleForm(form.gameObject,formName);
+                        _loadedForms.Remove(formName);
+                        break;
+                    case UIFormLifecycle.AutoDestroy:
+                        // 直接销毁
+                        Destroy(form.gameObject);
+                        _loadedForms.Remove(formName);
+                        break;
                 }
+
             });
         }
 
         /// <summary>
-        /// 关闭指定层级的所有界面
+        /// 关闭指定层级的所有界面（适配生命周期）
         /// </summary>
         public void CloseLayerAllForms(UILayer layer,Action onComplete = null) {
             Stack<string> targetStack = _layerFormStacks[layer];
-            List<UIForm> layerForms = new List<UIForm>();
+            List<string> formNames = new List<string>(targetStack);
+            formNames.AddRange(_loadedForms.Keys.Where(name => _loadedForms[name].Config.Layer == layer));
 
-            foreach (var form in _loadedForms.Values) {
-                if (form.Config.Layer == layer) {
-                    layerForms.Add(form);
-                }
-            }
+            int closeCount = 0;
+            int totalCount = formNames.Count;
 
-            if (layerForms.Count == 0) {
-                targetStack.Clear();
+            if (totalCount == 0) {
                 onComplete?.Invoke();
                 return;
             }
 
-            int closeCount = 0;
-            foreach (var form in layerForms) {
-                form.Hide(true,() => {
+            foreach (string formName in formNames) {
+                CloseForm(formName,() => {
                     closeCount++;
-                    if (closeCount >= layerForms.Count) {
+                    if (closeCount == totalCount) {
                         targetStack.Clear();
-                        foreach (var f in layerForms) {
-                            _loadedForms.Remove(f.FormName);
-                            _uiPool.RecycleForm(f.gameObject,f.FormName);
-                        }
                         onComplete?.Invoke();
                     }
                 });
@@ -451,55 +623,62 @@ namespace RS.Unity3DLib.UISystem
         /// 关闭所有界面
         /// </summary>
         public void CloseAllForms(Action onComplete = null) {
-            List<UIForm> allForms = new List<UIForm>(_loadedForms.Values);
-            if (allForms.Count == 0) {
-                foreach (var stack in _layerFormStacks.Values) {
-                    stack.Clear();
-                }
+            List<string> formNames = new List<string>(_loadedForms.Keys);
+            int closeCount = 0;
+            int totalCount = formNames.Count;
+
+            if (totalCount == 0) {
                 onComplete?.Invoke();
                 return;
             }
 
-            int closeCount = 0;
-            foreach (var form in allForms) {
-                form.Hide(true,() => {
+            foreach (string formName in formNames) {
+                CloseForm(formName,() => {
                     closeCount++;
-                    if (closeCount >= allForms.Count) {
-                        _loadedForms.Clear();
+                    if (closeCount == totalCount) {
                         foreach (var stack in _layerFormStacks.Values) {
                             stack.Clear();
                         }
-                        _uiPool.Clear();
                         onComplete?.Invoke();
                     }
                 });
             }
-        }
 
+        }
         /// <summary>
-        /// 显示普通弹窗（快捷方法）
+        /// 更新加载进度
         /// </summary>
-        public void ShowPopup(string title,string content,Action onConfirm = null,Action onCancel = null,Action onComplete = null) {
-            ShowForm<UIPopup>(null,() => {
-                var popup = GetForm<UIPopup>();
-                popup?.ShowPopup(title,content,onConfirm,onCancel,onComplete);
+        public void UpdateLoadingProgress(float progress,string tip = "") {
+            var loadingForm = GetForm<UIFormLoading>();
+            if (loadingForm != null) {
+                loadingForm.UpdateProgress(progress,tip);
+            }
+        }
+        /// <summary>
+        /// 显示普通弹窗
+        /// </summary>
+        /// <summary>
+        /// 显示通用弹窗
+        /// </summary>
+        public void ShowPopup(string title,string content,DialogButtonType buttonType,
+                             Action<DialogButtonResult> onResult,Action onShowComplete = null) {
+            ShowForm<UIFormPopup>(null,() => {
+                var popup = GetForm<UIFormPopup>();
+                popup?.ShowPopup(title,content,buttonType,onResult,onShowComplete);
             });
         }
 
         /// <summary>
-        /// 显示输入框弹窗（快捷方法）
+        /// 显示通用输入框
         /// </summary>
-        public void ShowInputPopup(string title,string hint,InputFieldType inputType = InputFieldType.Normal,
-                                   string defaultValue = "",int maxLength = 20,Action<string> onConfirm = null,
-                                   Action onCancel = null,Action onComplete = null) {
-            ShowForm<UIInputPopup>(null,() => {
-                var inputPopup = GetForm<UIInputPopup>();
-                if (inputPopup == null) {
-                    Debug.LogError("输入框弹窗 UIInputPopup 加载失败");
-                    onComplete?.Invoke();
-                    return;
-                }
-                inputPopup.ShowInputPopup(title,hint,inputType,defaultValue,maxLength,onConfirm,onCancel,onComplete);
+        public void ShowInputPopup(string title,string hint,InputType inputType,bool isPassword = false,
+                                  string defaultValue = "",int maxLength = 20,
+                                  Action<object> onConfirm = null,Action onCancel = null,
+                                  Action onShowComplete = null) {
+            ShowForm<UIFormInputPopup>(null,() => {
+                var inputPopup = GetForm<UIFormInputPopup>();
+                inputPopup?.ShowInputPopup(title,hint,inputType,isPassword,defaultValue,maxLength,
+                                          onConfirm,onCancel,onShowComplete);
             });
         }
 
@@ -515,10 +694,10 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 显示已加载的界面（处理层级栈逻辑）
         /// </summary>
-        private void ShowLoadedForm(UIForm form,UIFormConfig config,object data,Action onComplete) {
+        private void ShowLoadedForm(UIFormBase form,UIFormConfig config,object data,Action onComplete) {
             if (config.IsAddToStack) {
                 Stack<string> targetStack = _layerFormStacks[config.Layer];
-                List<UIForm> sameLayerShowingForms = new List<UIForm>();
+                List<UIFormBase> sameLayerShowingForms = new List<UIFormBase>();
 
                 // 收集同层级显示中的界面
                 foreach (var loadedForm in _loadedForms.Values) {
@@ -531,6 +710,7 @@ namespace RS.Unity3DLib.UISystem
                 if (sameLayerShowingForms.Count > 0) {
                     int hideCount = 0;
                     foreach (var sameLayerForm in sameLayerShowingForms) {
+                        // 固定传递 isDestroy=false，仅临时隐藏，不销毁
                         sameLayerForm.Hide(false,() => {
                             targetStack.Push(sameLayerForm.FormName);
                             hideCount++;
@@ -570,9 +750,9 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 获取已加载的界面
         /// </summary>
-        public T GetForm<T>() where T : UIForm {
+        public T GetForm<T>() where T : UIFormBase {
             string formName = typeof(T).Name;
-            _loadedForms.TryGetValue(formName,out UIForm form);
+            _loadedForms.TryGetValue(formName,out UIFormBase form);
             return form as T;
         }
 
@@ -592,9 +772,30 @@ namespace RS.Unity3DLib.UISystem
         /// 检查界面是否显示中
         /// </summary>
         public bool IsFormShowing(string formName) {
-            return _loadedForms.TryGetValue(formName,out UIForm form) && form.IsShowing;
+            return _loadedForms.TryGetValue(formName,out UIFormBase form) && form.IsShowing;
         }
-
+        /// <summary>
+        /// 检查界面是否显示中
+        /// </summary>
+        public bool IsFormShowing<T>()where T:UIFormBase {
+            Type formType = typeof(T).GetType();
+            string formName = typeof(T).Name;
+            return IsFormShowing(formName);
+        }
+        /// <summary>
+        /// 检查界面是否正在加载
+        /// </summary>
+        public bool IsFormLoading(string formName) {
+            return _loadingForms.ContainsKey(formName);
+        }
+        /// <summary>
+        /// 检查界面是否正在加载
+        /// </summary>
+        public bool IsFormLoading<T>()where T:UIFormBase {
+            Type formType = typeof(T).GetType();
+            string formName = typeof(T).Name;
+            return IsFormLoading(formName);
+        }
         /// <summary>
         /// 获取指定层级的栈顶界面名称
         /// </summary>
@@ -604,10 +805,7 @@ namespace RS.Unity3DLib.UISystem
         }
         #endregion
 
-        private void OnDestroy() {
-            // 清空事件总线
-            UIEventBus.ClearAllEvents();
-        }
+
     }
 
 

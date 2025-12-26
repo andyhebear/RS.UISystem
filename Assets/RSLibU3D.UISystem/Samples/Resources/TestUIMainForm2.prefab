@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 4313776902262406963}
   - component: {fileID: 8464489532713337022}
   - component: {fileID: 8984170722959610265}
+  - component: {fileID: 6760363917025320646}
   m_Layer: 5
   m_Name: TestUIMainForm2
   m_TagString: Untagged
@@ -55,7 +56,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 81532349870769118}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
@@ -90,7 +91,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5c86c0521beb68429f73dfc93dcae8b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _canvasGroup: {fileID: 6760363917025320646}
   btn_test1: {fileID: 7155471276650275004}
+--- !u!225 &6760363917025320646
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 81532349870769118}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &3780320634751849691
 GameObject:
   m_ObjectHideFlags: 0

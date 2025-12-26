@@ -163,7 +163,18 @@ namespace RS.Unity3DLib.UISystem
         //public const string GameStart = "GameStart";             // 游戏开始事件（无参数）
         public const string NotifyShow = "NotifyShow";           // 通知显示事件（参数：string 内容，NotifyPosition 位置，float 时长）
         public const string SafeAreaUpdated = "SafeAreaUpdated"; // SafeArea更新事件（无参数）
-    }
+ 
+        // 通用UI事件
+        public const string UI_SHOWN = "UI_SHOWN";
+        public const string UI_HIDDEN = "UI_HIDDEN";
+        public const string UI_CLOSED = "UI_CLOSED";
+        public const string UI_REFRESH = "UI_REFRESH";
 
+        // 示例事件
+        public const string BUTTON_CLICKED = "BUTTON_CLICKED";
+        public const string MENU_SELECTED = "MENU_SELECTED";
+        public const string DIALOG_CONFIRM = "DIALOG_CONFIRM";
+        public const string DIALOG_CANCEL = "DIALOG_CANCEL";
+    }
 
 }

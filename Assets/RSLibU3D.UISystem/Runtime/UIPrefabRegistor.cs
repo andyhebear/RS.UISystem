@@ -40,12 +40,14 @@ namespace RS.Unity3DLib.UISystem
                     _prefabDictionary[prefabInfo.UIFormName] = prefabInfo.UIFormPrefab;
                     UIFormConfig info = new UIFormConfig() {
                         FormName = prefabInfo.UIFormName,
-                        IsPermanent = false,
+                        Lifecycle = UIFormLifecycle.AutoDestroy,
                         LoadType = UIResourceLoadType.PrefabRef,
-                        IsAddToStack = false,
+                        IsAddToStack = prefabInfo.IsAddToStack,
                         RefPrefab = prefabInfo.UIFormPrefab,
                         RefPrefabsFromScene = prefabInfo.PrefabIsFromScene,
                         Layer = prefabInfo.Layer,
+                        MaskType = prefabInfo.MaskType,
+                        //MaskColor = prefabInfo.MaskColor,
                     };
                     UIManager.Instance.RegisterUIFormConfig(info);
                 }
@@ -54,7 +56,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 注册UI预设，如果已经存在则更新
         /// </summary>
-        public void RegisterPrefab(string name,GameObject prefab,UILayer layer,bool prefabIsFromScene) {
+        public void RegisterPrefab(string name,GameObject prefab,UILayer layer,bool prefabIsFromScene, bool isAddToStack   ,UIMaskType masktype) {
             if (!string.IsNullOrEmpty(name) && prefab != null) {
                 _prefabDictionary[name] = prefab;
 
@@ -70,12 +72,14 @@ namespace RS.Unity3DLib.UISystem
                         //
                         UIFormConfig info = new UIFormConfig() {
                             FormName = name,
-                            IsPermanent = false,
+                            Lifecycle = UIFormLifecycle.AutoDestroy,
                             LoadType = UIResourceLoadType.PrefabRef,
-                            IsAddToStack = false,
+                             IsAddToStack=isAddToStack,
                             RefPrefab = prefab,
                             RefPrefabsFromScene = prefabIsFromScene,
                             Layer = layer,
+                            MaskType = prefabInfo.MaskType,
+                            //MaskColor = prefabInfo.MaskColor,
                         };
                         UIManager.Instance.RegisterUIFormConfig(info);
                         break;
@@ -83,20 +87,22 @@ namespace RS.Unity3DLib.UISystem
                 }
 
                 if (!found) {
-                    _uiPrefabs.Add(new UIFormPrefabInfo {  
-                        UIFormName = name, 
+                    _uiPrefabs.Add(new UIFormPrefabInfo {
+                        UIFormName = name,
                         UIFormPrefab = prefab,
-                     Layer=layer,
-                      PrefabIsFromScene=true
+                        Layer = layer,
+                        PrefabIsFromScene = true
                     });
                     UIFormConfig info = new UIFormConfig() {
                         FormName = name,
-                        IsPermanent = false,
+                        Lifecycle = UIFormLifecycle.AutoDestroy,
                         LoadType = UIResourceLoadType.PrefabRef,
-                        IsAddToStack = false,
+                        IsAddToStack=isAddToStack,
                         RefPrefab = prefab,
                         RefPrefabsFromScene = prefabIsFromScene,
                         Layer = layer,
+                        MaskType = masktype,
+                        //MaskColor = maskColor,
                     };
                     UIManager.Instance.RegisterUIFormConfig(info);
                 }
@@ -136,6 +142,9 @@ namespace RS.Unity3DLib.UISystem
         public string UIFormName;
         public GameObject UIFormPrefab;
         public UILayer Layer;
+        public bool IsAddToStack;
         public bool PrefabIsFromScene;
+        public UIMaskType MaskType = UIMaskType.None;   // 遮罩类型
+        //public Color MaskColor = new Color(0,0,0,0.5f); // 遮罩颜色
     }
 }

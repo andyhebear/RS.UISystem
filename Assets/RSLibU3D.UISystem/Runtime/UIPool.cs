@@ -52,7 +52,7 @@ namespace RS.Unity3DLib.UISystem
             if (!_formPools.ContainsKey(formName)) {
                 _formPools.Add(formName,CreatePoolGroup(formName));
             }
-
+        
             Transform poolGroup = _formPools[formName];
             formObj.transform.SetParent(poolGroup);
             formObj.transform.localPosition = Vector3.zero;

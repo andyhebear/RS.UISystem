@@ -24,6 +24,7 @@ namespace RS.Unity3DLib.UISystem
     {
         #region Simulations
         /// <summary>
+        /// 因物理凹槽或软件主页栏而使用安全区域的模拟设备。仅用于编辑器中。
         /// Simulation device that uses safe area due to a physical notch or software home bar. For use in Editor only.
         /// </summary>
         public enum SimDevice
@@ -51,10 +52,14 @@ namespace RS.Unity3DLib.UISystem
         }
 
         /// <summary>
+        /// 仅在编辑器中使用的模拟模式。可以在运行时对其进行编辑，以在不同的安全区域之间切换。
         /// Simulation mode for use in editor only. This can be edited at runtime to toggle between different safe areas.
         /// </summary>
+#if UNITY_EDITOR
+        public const SimDevice Sim = SimDevice.iPhoneX;
+#else
         public const SimDevice Sim = SimDevice.None;
-
+#endif
         /// <summary>
         /// Normalised safe areas for iPhone X with Home indicator (ratios are identical to Xs, 11 Pro). Absolute values:
         ///  PortraitU x=0, y=102, w=1125, h=2202 on full extents w=1125, h=2436;
@@ -105,15 +110,15 @@ namespace RS.Unity3DLib.UISystem
             new Rect(0f, 0f, 1f, 2789f / 2960f), // Portrait
             new Rect(171f / 2960f, 0f, 2789f / 2960f, 1f) // Landscape
         };
-        #endregion
+#endregion
         public bool EnableSafeArea;
         private RectTransform Panel;
         private Rect LastSafeArea = new Rect(0,0,0,0);
         private Vector2Int LastScreenSize = new Vector2Int(0,0);
         private ScreenOrientation LastOrientation = ScreenOrientation.AutoRotation;
-        [SerializeField] private bool ConformX = false; // Conform to screen safe area on X-axis (default true, disable to ignore)
-        [SerializeField] private bool ConformY = true; // Conform to screen safe area on Y-axis (default true, disable to ignore)
-        [SerializeField] private bool Logging = false; // Conform to screen safe area on Y-axis (default true, disable to ignore)
+        [SerializeField] private bool ConformX = false; //在 X 轴上遵循屏幕安全区域（默认值为 true，禁用则忽略） Conform to screen safe area on X-axis (default true, disable to ignore)
+        [SerializeField] private bool ConformY = true; //在 X 轴上遵循屏幕安全区域（默认值为 true，禁用则忽略） Conform to screen safe area on Y-axis (default true, disable to ignore)
+        [SerializeField] private bool Logging = false; // 记录ApplySafeArea
 
         private void Awake() {
             Panel = GetComponent<RectTransform>();
@@ -163,6 +168,7 @@ namespace RS.Unity3DLib.UISystem
                 || Screen.width != LastScreenSize.x
                 || Screen.height != LastScreenSize.y
                 || Screen.orientation != LastOrientation) {
+                //针对自动旋转关闭且手动强制屏幕方向的修复方案。
                 // Fix for having auto-rotate off and manually forcing a screen orientation.
                 // See https://forum.unity.com/threads/569236/#post-4473253 and https://forum.unity.com/threads/569236/page-2#post-5166467
                 LastScreenSize.x = Screen.width;
@@ -177,7 +183,7 @@ namespace RS.Unity3DLib.UISystem
             var safeArea = Screen.safeArea;
 
             if (Application.isEditor && Sim != SimDevice.None)
-#pragma warning disable CS0162 // Unreachable code detected
+#pragma warning disable CS0162 //检测到无法执行的代码 Unreachable code detected
             {
                 Rect nsa = new Rect(0,0,Screen.width,Screen.height);
 
@@ -212,7 +218,7 @@ namespace RS.Unity3DLib.UISystem
 
                 safeArea = new Rect(Screen.width * nsa.x,Screen.height * nsa.y,Screen.width * nsa.width,Screen.height * nsa.height);
             }
-#pragma warning restore CS0162 // Unreachable code detected
+#pragma warning restore CS0162 //检测到无法执行的代码 Unreachable code detected
 
             return safeArea;
         }
@@ -231,9 +237,10 @@ namespace RS.Unity3DLib.UISystem
                 r.y = 0;
                 r.height = Screen.height;
             }
-
+            //检查部分三星设备上的无效屏幕启动状态（见下文）
             // Check for invalid screen startup state on some Samsung devices (see below)
             if (Screen.width > 0 && Screen.height > 0) {
+                //将安全区域矩形从绝对像素转换为归一化锚点坐标
                 // Convert safe area rectangle from absolute pixels to normalised anchor coordinates
                 Vector2 anchorMin = r.position;
                 Vector2 anchorMax = r.position + r.size;
@@ -241,7 +248,7 @@ namespace RS.Unity3DLib.UISystem
                 anchorMin.y /= Screen.height;
                 anchorMax.x /= Screen.width;
                 anchorMax.y /= Screen.height;
-
+                //针对部分三星设备（例如 Note 10+、A71、S20）的修复，这些设备存在刷新被调用两次且第一次返回非数字（NaN）锚点坐标的问题
                 // Fix for some Samsung devices (e.g. Note 10+, A71, S20) where Refresh gets called twice and the first time returns NaN anchor coordinates
                 // See https://forum.unity.com/threads/569236/page-2#post-6199352
                 if (anchorMin.x >= 0 && anchorMin.y >= 0 && anchorMax.x >= 0 && anchorMax.y >= 0) {

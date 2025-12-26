@@ -13,38 +13,75 @@ MonoBehaviour:
   m_Name: UIConfig
   m_EditorClassIdentifier: 
   FormConfigs:
-  - FormName: UIPopup
-    Layer: 2
+  - FormName: UIFormPopup
+    Layer: 3
     IsAddToStack: 0
-    IsPermanent: 1
-    PrefabPath: UIPopup.prefab
-    LoadType: 0
+    MaskType: 1
+    Lifecycle: 0
+    PrefabPath: 
+    LoadType: 4
+    ABPackageName: 
     AssetBundleName: 
-  - FormName: UIInputPopup
-    Layer: 2
+    RefPrefab: {fileID: 4242209669084538317, guid: 0ba3068ea78cd21428052a8b477da6a6, type: 3}
+    RefPrefabsFromScene: 0
+    ShowLoading: 0
+  - FormName: UIFormInputPopup
+    Layer: 3
     IsAddToStack: 0
-    IsPermanent: 1
-    PrefabPath: UIInputPopup.prefab
-    LoadType: 0
+    MaskType: 1
+    Lifecycle: 0
+    PrefabPath: 
+    LoadType: 4
+    ABPackageName: 
     AssetBundleName: 
-  - FormName: UINotifyLayer
+    RefPrefab: {fileID: 3235626069016282514, guid: ad892196834d6b145946be7341b322c9, type: 3}
+    RefPrefabsFromScene: 0
+    ShowLoading: 0
+  - FormName: UIFormNotify
+    Layer: 6
+    IsAddToStack: 0
+    MaskType: 0
+    Lifecycle: 2
+    PrefabPath: 
+    LoadType: 4
+    ABPackageName: 
+    AssetBundleName: 
+    RefPrefab: {fileID: 2197449444320631676, guid: 7d32baa15ecba4d4c9a134be24ca743d, type: 3}
+    RefPrefabsFromScene: 0
+    ShowLoading: 0
+  - FormName: UIFormLoading
     Layer: 5
     IsAddToStack: 0
-    IsPermanent: 1
-    PrefabPath: UINotifyLayer.prefab
-    LoadType: 0
+    MaskType: 1
+    Lifecycle: 0
+    PrefabPath: 
+    LoadType: 4
+    ABPackageName: 
     AssetBundleName: 
+    RefPrefab: {fileID: 3617659220794740995, guid: f2e0cca347d39a64196784ca0499e368, type: 3}
+    RefPrefabsFromScene: 0
+    ShowLoading: 0
   - FormName: TestUIMainForm
     Layer: 1
     IsAddToStack: 1
-    IsPermanent: 0
+    MaskType: 3
+    Lifecycle: 0
     PrefabPath: TestUIMainForm.prefab
     LoadType: 0
+    ABPackageName: 
     AssetBundleName: 
+    RefPrefab: {fileID: 0}
+    RefPrefabsFromScene: 0
+    ShowLoading: 1
   - FormName: TestUIMainForm2
     Layer: 1
     IsAddToStack: 1
-    IsPermanent: 0
+    MaskType: 3
+    Lifecycle: 0
     PrefabPath: TestUIMainForm2.prefab
     LoadType: 0
+    ABPackageName: 
     AssetBundleName: 
+    RefPrefab: {fileID: 0}
+    RefPrefabsFromScene: 0
+    ShowLoading: 1

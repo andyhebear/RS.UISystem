@@ -1,9 +1,9 @@
 {
-    "name": "com.rslib_u3d.f8uisystem",
-    "displayName": "RSLibU3D.F8UISystem",
+    "name": "com.rslib_u3d.uisystem",
+    "displayName": "RSLibU3D.UISystem",
     "author": {
         "name": "andyhebear",
-        "url": "https://127.0.0.1/rs/f8uisystem"
+        "url": "https://127.0.0.1/rs/uisystem"
     },
     "version": "1.1.1",
     "unity": "2021.3",
