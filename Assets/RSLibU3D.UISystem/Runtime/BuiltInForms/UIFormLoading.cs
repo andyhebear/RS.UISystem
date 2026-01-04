@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -55,20 +55,25 @@ namespace RS.Unity3DLib.UISystem
         }
         public override void Show(object data = null,Action onComplete = null) {
             _loadingCount++;
-            if (_loadingCount > 1) {
-                onComplete?.Invoke();
-                return;
+            // 无论如何都调用回调，确保后续操作能正常进行
+            onComplete?.Invoke();
+            
+            // 只在第一次显示时执行实际的显示逻辑
+            if (_loadingCount == 1) {
+                base.Show(data,null);
             }
-            base.Show(data,onComplete);
         }
 
         public override void Hide(bool isDestroy = false,Action onComplete = null) {
             _loadingCount--;
-            if (_loadingCount > 0) {
-                onComplete?.Invoke();
-                return;
+            // 无论如何都调用回调，确保后续操作能正常进行
+            onComplete?.Invoke();
+            
+            // 只在所有加载操作完成时执行实际的隐藏逻辑
+            if (_loadingCount <= 0) {
+                _loadingCount = 0; // 防止计数器变为负数
+                base.Hide(isDestroy,null);
             }
-            base.Hide(isDestroy,onComplete);
         }
         protected override void OnHideBefore() {
 

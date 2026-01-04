@@ -70,7 +70,7 @@ namespace RS.Unity3DLib.UISystem
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            CoroutineHelper.Initialize(this,System.Threading.Thread.CurrentThread.ManagedThreadId);
+            UICoroutineHelper.Initialize(this,System.Threading.Thread.CurrentThread.ManagedThreadId);
             InitUICamera();
             // 初始化层级父节点
             InitLayerParents();
@@ -455,9 +455,8 @@ namespace RS.Unity3DLib.UISystem
 
             // 显示加载界面
             if (config.ShowLoading) {
-                ShowForm<UIFormLoading>(null,() => {
-                    GetForm<UIFormLoading>()?.UpdateProgress(0.2f,"加载界面中...");
-                });
+                // 使用UITopWaitingMgr显示加载界面，使用formName作为windowId
+                UITopWaitingMgr.Show(formName);
             }
 
             // 标记为加载中
@@ -467,7 +466,7 @@ namespace RS.Unity3DLib.UISystem
             LoadUIPrefabAsync(config,(prefab) => {
                 if (prefab == null) {
                     if (config.ShowLoading) {
-                        CloseForm<UIFormLoading>();
+                        UITopWaitingMgr.Hide(formName);
                     }
                     _loadingForms.Remove(formName);
                     onComplete?.Invoke();
@@ -482,7 +481,7 @@ namespace RS.Unity3DLib.UISystem
                     Debug.LogError($"界面预制体 {formName} 未挂载UIForm脚本");
                     Destroy(formObj);
                     if (config.ShowLoading) {
-                        CloseForm<UIFormLoading>();
+                        UITopWaitingMgr.Hide(formName);
                     }
                     _loadingForms.Remove(formName);
                     onComplete?.Invoke();
@@ -496,18 +495,15 @@ namespace RS.Unity3DLib.UISystem
 
                 // 隐藏加载界面并显示目标界面
                 if (config.ShowLoading) {
-                    CloseForm<UIFormLoading>(() => {
-                        ShowLoadedForm(form,config,data,onComplete);
-                    });
+                    // 使用UITopWaitingMgr隐藏加载界面
+                    UITopWaitingMgr.Hide(formName);
                 }
-                else {
-                    ShowLoadedForm(form,config,data,onComplete);
-                }
-
+                
+                ShowLoadedForm(form,config,data,onComplete);
                 _loadingForms.Remove(formName);
             },(error) => {
                 Debug.LogError($"加载界面 {formName} 失败：{error}");
-                if (config.ShowLoading) CloseForm<UIFormLoading>();
+                if (config.ShowLoading) UITopWaitingMgr.Hide(formName);
                 _loadingForms.Remove(formName);
                 onComplete?.Invoke();
             });
@@ -645,20 +641,9 @@ namespace RS.Unity3DLib.UISystem
             }
 
         }
+       
         /// <summary>
-        /// 更新加载进度
-        /// </summary>
-        public void UpdateLoadingProgress(float progress,string tip = "") {
-            var loadingForm = GetForm<UIFormLoading>();
-            if (loadingForm != null) {
-                loadingForm.UpdateProgress(progress,tip);
-            }
-        }
-        /// <summary>
-        /// 显示普通弹窗
-        /// </summary>
-        /// <summary>
-        /// 显示通用弹窗
+        /// 显示内置的通用弹窗
         /// </summary>
         public void ShowPopup(string title,string content,DialogButtonType buttonType,
                              Action<DialogButtonResult> onResult,Action onShowComplete = null) {
@@ -669,7 +654,7 @@ namespace RS.Unity3DLib.UISystem
         }
 
         /// <summary>
-        /// 显示通用输入框
+        /// 显示内置的通用输入框窗口
         /// </summary>
         public void ShowInputPopup(string title,string hint,InputType inputType,bool isPassword = false,
                                   string defaultValue = "",int maxLength = 20,
@@ -687,6 +672,32 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         public void ShowNotify(string content,NotifyPosition position = NotifyPosition.TopRight,float duration = 3f) {
             UIEventBus.Trigger<(string, NotifyPosition, float)>(UIEventNames.NotifyShow,(content, position, duration));
+        }
+        /// <summary>
+        /// 显示内置的loading窗口
+        /// </summary>
+        /// <param name="context"></param>
+        public void ShowLoadingForm(string context) {
+            ShowForm<UIFormLoading>(null,()=> {
+                var lf = GetForm<UIFormLoading>();
+                lf?.UpdateProgress(0.2f,context);
+              
+            });
+        }
+        /// <summary>
+        /// 更新内置的Loading窗口的进度，UITopWaitingMgr中的等待窗口更新进度自己管理，不在这里提供接口
+        /// </summary>
+        public void UpdateLoadingFormProgress(float progress,string tip = "") {
+            var loadingForm = GetForm<UIFormLoading>();
+            if (loadingForm != null) {
+                loadingForm.UpdateProgress(progress,tip);
+            }
+        }
+        /// <summary>
+        /// 关闭内置的loading窗口
+        /// </summary>
+        public void CloseLoadingForm() {
+            CloseForm<UIFormLoading>();
         }
         #endregion
 

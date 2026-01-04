@@ -195,7 +195,11 @@ namespace RS.Unity3DLib.UISystem.UIEffect
 
             // 销毁运行时创建的Material（排除自定义材质，避免内存泄漏）
             if (_effectMaterial != null && _effectMaterial != m_CustomEffectMaterial) {
-                Destroy(_effectMaterial);
+#if UNITY_EDITOR              
+                    DestroyImmediate(_effectMaterial);     
+#else            
+                    Destroy(_effectMaterial);                
+#endif
                 _effectMaterial = null;
             }
         }
@@ -262,7 +266,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
 
             // 优先使用自定义材质
             if (m_CustomEffectMaterial != null) {
-                _effectMaterial =new Material(m_CustomEffectMaterial);
+                _effectMaterial = new Material(m_CustomEffectMaterial) { hideFlags = HideFlags.HideAndDontSave | HideFlags.NotEditable };
                 UpdateShaderKeywords();
                 return;
             }
@@ -277,7 +281,11 @@ namespace RS.Unity3DLib.UISystem.UIEffect
 
             // 生成/获取 Material 变体（Editor模式复用原逻辑，运行时直接创建）
 #if UNITY_EDITOR
-            _effectMaterial = _GetOrGenerateMaterialVariant(blurShader,m_BlurMode);
+           var effectMaterial = _GetOrGenerateMaterialVariant(blurShader,m_BlurMode);
+            _effectMaterial = new Material(effectMaterial);
+            _effectMaterial.name = $"{ShaderName}_{m_BlurMode}";
+            _effectMaterial.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
+            UpdateShaderKeywords();
 #else
             _effectMaterial = new Material(blurShader);
             _effectMaterial.name = $"{ShaderName}_{m_BlurMode}";
@@ -502,7 +510,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
 
             _isCapturing = false;
         }
-        #region 动态计算保证全屏填充
+#region 动态计算保证全屏填充
         /// <summary> 适配根Canvas尺寸（全屏+置于最下层） </summary>
         private void _AdaptToCanvasSize() {
             if (_rootCanvas == null || _rawImageRect == null)
@@ -658,7 +666,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
             _lastRootCanvasRectSize = (_rootCanvas.transform as RectTransform).rect.size;
         }
 
-        #endregion
+#endregion
         /// <summary> 更新Shader Keyword（根据BlurMode启用对应的模糊等级） </summary>
         public void UpdateShaderKeywords() {
             if (_effectMaterial == null)
@@ -763,13 +771,22 @@ namespace RS.Unity3DLib.UISystem.UIEffect
         /// <summary> 获取Material保存路径（对齐原脚本） </summary>
         private string _GetDefaultMaterialPath(Shader shader) {
             string shaderFileName = Path.GetFileName(shader.name);
+            // 编辑器环境下直接获取shader文件路径
+            string shaderPath = AssetDatabase.GetAssetPath(shader);
+            string directoryPath = Path.GetDirectoryName(shaderPath);          
             string existingPath = AssetDatabase.FindAssets($"t:Material {shaderFileName}")
                 .Select(guid => AssetDatabase.GUIDToAssetPath(guid))
                 .FirstOrDefault(path => Path.GetFileNameWithoutExtension(path) == shaderFileName);
-
-            return existingPath ?? $"Assets/RSLibU3D.UISystem/{shaderFileName}.mat";
+            if (string.IsNullOrEmpty(existingPath)) {
+               existingPath = directoryPath + $"/{Path.GetFileNameWithoutExtension(shaderFileName)}.mat";
+            }
+            return existingPath ;
         }
-
+        //static string ResolveEditorDir() {
+        //    var editorClass = $"{typeof(UIRawImageBackgroundBlur).Name}.cs";
+        //    var editorPath = AssetDatabase.GetAllAssetPaths().First(path => { return path.Contains(editorClass); });
+        //    return editorPath.Replace(editorClass,string.Empty);
+        //}
         /// <summary> 获取Material变体名称（对齐原脚本） </summary>
         private string _GetVariantName(Shader shader,BlurMode blurMode) {
             string baseName = Path.GetFileName(shader.name);

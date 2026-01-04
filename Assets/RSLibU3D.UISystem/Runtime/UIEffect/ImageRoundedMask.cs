@@ -27,7 +27,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
         
         private void OnDestroy() {
             image.material = null;
-            DestroyHelper.Destroy(material);
+            UIDestroyHelper.Destroy(material);
             image = null;
             material = null;
         }
@@ -36,7 +36,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
             var other = GetComponent<ImageIndependentRoundedMask>();
             if (other != null) {
                 radius = other.r.x; //When it does, transfer the radius value to this script
-                DestroyHelper.Destroy(other);
+                UIDestroyHelper.Destroy(other);
             }
             
             Validate();

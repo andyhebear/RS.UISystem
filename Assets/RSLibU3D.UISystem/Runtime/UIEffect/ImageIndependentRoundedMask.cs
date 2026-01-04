@@ -38,7 +38,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
             if (other != null)
             {
                 r = Vector4.one * other.radius;
-                DestroyHelper.Destroy(other);
+                UIDestroyHelper.Destroy(other);
             }
 
             Validate();
@@ -53,7 +53,7 @@ namespace RS.Unity3DLib.UISystem.UIEffect
         
         private void OnDestroy() {
             image.material = null;
-            DestroyHelper.Destroy(material);
+            UIDestroyHelper.Destroy(material);
             image = null;
             material = null;
         }

@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using RS.Unity3DLib;
-
+using RS.Unity3DLib.UISystem;
 public class testUISystem1 : MonoBehaviour
 {
     // Start is called before the first frame update
@@ -12,6 +12,9 @@ public class testUISystem1 : MonoBehaviour
         StartCoroutine(testShow());
     }
     IEnumerator testShow() {
+        UIManager.Instance.ShowLoadingForm("waiting 1.");
+        yield return new  WaitForSeconds(3f);
+        UIManager.Instance.CloseLoadingForm();
         RS.Unity3DLib.UISystem.UIManager.Instance.ShowPopup("test22","test message box",RS.Unity3DLib.UISystem.DialogButtonType.OKCancel,(ret) => {
             
             Debug.Log("click ok");

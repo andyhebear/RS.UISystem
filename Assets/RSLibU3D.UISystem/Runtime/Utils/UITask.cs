@@ -14,7 +14,7 @@ namespace RS.Unity3DLib.UISystem
     /// <summary>
     /// 协程工具类（WebGL 兼容，统一管理主线程异步操作）
     /// </summary>
-    public static class CoroutineHelper
+    public static class UICoroutineHelper
     {
         private static MonoBehaviour _host;
         private static bool _isInitialized;
@@ -109,11 +109,11 @@ namespace RS.Unity3DLib.UISystem
     }
     #endregion
 
-    #region 非泛型 SimpleTask（核心基类）
+    #region 非泛型 UITask（基类）
     /// <summary>
     /// 无返回值异步任务（支持 await/yield return，兼容 WebGL）
     /// </summary>
-    public class SimpleTask : IDisposable
+    public class UITask : IDisposable
     {
         /// <summary>任务状态：未完成</summary>
         public bool IsCompleted => _isCompleted;
@@ -134,26 +134,26 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个空的 SimpleTask（需手动调用 SetCompleted/SetException 结束）
         /// </summary>
-        public static SimpleTask Create() => new SimpleTask();
+        public static UITask Create() => new UITask();
 
         /// <summary>
         /// 创建一个延时完成的 SimpleTask（WebGL 兼容）
         /// </summary>
         /// <param name="delaySeconds">延时秒数</param>
-        public static SimpleTask Delay(float delaySeconds) {
-            var task = new SimpleTask();
-            CoroutineHelper.RunDelayed(delaySeconds,task.SetCompleted);
+        public static UITask Delay(float delaySeconds) {
+            var task = new UITask();
+            UICoroutineHelper.RunDelayed(delaySeconds,task.SetCompleted);
             return task;
         }
 
         /// <summary>
         /// 并行等待多个 SimpleTask 全部完成（非泛型版 WhenAll）
         /// </summary>
-        public static SimpleTask WhenAll(params SimpleTask[] tasks) {
+        public static UITask WhenAll(params UITask[] tasks) {
             if (tasks == null) throw new ArgumentNullException(nameof(tasks));
             if (tasks.Length == 0) return CompletedTask();
 
-            var completedTask = new SimpleTask();
+            var completedTask = new UITask();
             int remaining = tasks.Length;
 
             foreach (var task in tasks) {
@@ -179,8 +179,8 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个已完成的 SimpleTask
         /// </summary>
-        public static SimpleTask CompletedTask() {
-            var task = new SimpleTask();
+        public static UITask CompletedTask() {
+            var task = new UITask();
             task.SetCompleted();
             return task;
         }
@@ -188,8 +188,8 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个已失败的 SimpleTask
         /// </summary>
-        public static SimpleTask FailedTask(Exception ex) {
-            var task = new SimpleTask();
+        public static UITask FailedTask(Exception ex) {
+            var task = new UITask();
             task.SetException(ex);
             return task;
         }
@@ -234,7 +234,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 获取 await 所需的 Awaiter
         /// </summary>
-        public SimpleTaskAwaiter GetAwaiter() => new SimpleTaskAwaiter(this);
+        public UITaskAwaiter GetAwaiter() => new UITaskAwaiter(this);
 
         /// <summary>
         /// 注册 await 完成后的回调
@@ -246,7 +246,7 @@ namespace RS.Unity3DLib.UISystem
                 ThrowIfDisposed();
                 if (_isCompleted) {
                     // 已完成则立即调度到主线程执行（WebGL 安全）
-                    CoroutineHelper.DispatchToMainThread(continuation);
+                    UICoroutineHelper.DispatchToMainThread(continuation);
                     return;
                 }
                 _continuations.Add(continuation);
@@ -258,23 +258,23 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 获取协程等待指令（支持 yield return task）
         /// </summary>
-        public CustomYieldInstruction WaitForCompletion() => new SimpleTaskYieldInstruction(this);
+        public CustomYieldInstruction WaitForCompletion() => new UITaskYieldInstruction(this);
 
         /// <summary>
         /// 隐式转换为 CustomYieldInstruction（直接 yield return task）
         /// </summary>
-        public static implicit operator CustomYieldInstruction(SimpleTask task) {
+        public static implicit operator CustomYieldInstruction(UITask task) {
             return task?.WaitForCompletion() ?? throw new ArgumentNullException(nameof(task));
         }
 
         /// <summary>
         /// 协程等待指令实现
         /// </summary>
-        private class SimpleTaskYieldInstruction : CustomYieldInstruction
+        private class UITaskYieldInstruction : CustomYieldInstruction
         {
-            private readonly SimpleTask _task;
+            private readonly UITask _task;
 
-            public SimpleTaskYieldInstruction(SimpleTask task) {
+            public UITaskYieldInstruction(UITask task) {
                 _task = task ?? throw new ArgumentNullException(nameof(task));
             }
 
@@ -293,7 +293,7 @@ namespace RS.Unity3DLib.UISystem
 
             // 调度到主线程执行所有回调（WebGL 必须）
             foreach (var callback in callbacks) {
-                CoroutineHelper.DispatchToMainThread(() => {
+                UICoroutineHelper.DispatchToMainThread(() => {
                     try {
                         callback?.Invoke();
                     }
@@ -308,7 +308,7 @@ namespace RS.Unity3DLib.UISystem
         /// 检查是否已释放，若已释放则抛出异常
         /// </summary>
         private void ThrowIfDisposed() {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(SimpleTask),"任务已释放，无法执行操作");
+            if (_isDisposed) throw new ObjectDisposedException(nameof(UITask),"任务已释放，无法执行操作");
         }
         #endregion
 
@@ -328,12 +328,12 @@ namespace RS.Unity3DLib.UISystem
     }
     #endregion
 
-    #region 泛型 SimpleTask<T>（有返回值）
+    #region 泛型 UITask<T>（有返回值）
     /// <summary>
     /// 有返回值异步任务（支持 await/yield return，兼容 WebGL）
     /// </summary>
     /// <typeparam name="T">任务返回值类型</typeparam>
-    public class SimpleTask<T> : IDisposable
+    public class UITask<T> : IDisposable
     {
         /// <summary>任务状态：未完成</summary>
         public bool IsCompleted => _isCompleted;
@@ -364,28 +364,28 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个空的 SimpleTask<T>（需手动调用 SetResult/SetException 结束）
         /// </summary>
-        public static SimpleTask<T> Create() => new SimpleTask<T>();
+        public static UITask<T> Create() => new UITask<T>();
 
         /// <summary>
         /// 创建一个延时返回结果的 SimpleTask<T>（WebGL 兼容）
         /// </summary>
-        public static SimpleTask<T> Delay(float delaySeconds,T result) {
-            var task = new SimpleTask<T>();
-            CoroutineHelper.RunDelayed(delaySeconds,() => task.SetResult(result));
+        public static UITask<T> Delay(float delaySeconds,T result) {
+            var task = new UITask<T>();
+            UICoroutineHelper.RunDelayed(delaySeconds,() => task.SetResult(result));
             return task;
         }
 
         /// <summary>
         /// 并行等待多个 SimpleTask<T> 全部完成（泛型版 WhenAll）
         /// </summary>
-        public static SimpleTask<T[]> WhenAll(params SimpleTask<T>[] tasks) {
+        public static UITask<T[]> WhenAll(params UITask<T>[] tasks) {
             if (tasks == null) throw new ArgumentNullException(nameof(tasks));
             if (tasks.Length == 0) {
-                var emptyTask = new SimpleTask<T[]>();
+                var emptyTask = new UITask<T[]>();
                 emptyTask.SetResult(Array.Empty<T>()); // 直接设置 T[] 类型结果，类型匹配
                 return emptyTask;
             }
-            var completedTask = new SimpleTask<T[]>();
+            var completedTask = new UITask<T[]>();
             int remaining = tasks.Length;
             var results = new T[tasks.Length];
 
@@ -414,8 +414,8 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个已完成的 SimpleTask<T>
         /// </summary>
-        public static SimpleTask<T> CompletedTask(T result) {
-            var task = new SimpleTask<T>();
+        public static UITask<T> CompletedTask(T result) {
+            var task = new UITask<T>();
             task.SetResult(result);
             return task;
         }
@@ -423,8 +423,8 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 创建一个已失败的 SimpleTask<T>
         /// </summary>
-        public static SimpleTask<T> FailedTask(Exception ex) {
-            var task = new SimpleTask<T>();
+        public static UITask<T> FailedTask(Exception ex) {
+            var task = new UITask<T>();
             task.SetException(ex);
             return task;
         }
@@ -471,7 +471,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 获取 await 所需的 Awaiter
         /// </summary>
-        public SimpleTaskAwaiter<T> GetAwaiter() => new SimpleTaskAwaiter<T>(this);
+        public UITaskAwaiter<T> GetAwaiter() => new UITaskAwaiter<T>(this);
 
         /// <summary>
         /// 注册 await 完成后的回调
@@ -482,7 +482,7 @@ namespace RS.Unity3DLib.UISystem
             lock (_lockObj) {
                 ThrowIfDisposed();
                 if (_isCompleted) {
-                    CoroutineHelper.DispatchToMainThread(continuation);
+                    UICoroutineHelper.DispatchToMainThread(continuation);
                     return;
                 }
                 _continuations.Add(continuation);
@@ -494,23 +494,23 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 获取协程等待指令（支持 yield return task）
         /// </summary>
-        public CustomYieldInstruction WaitForCompletion() => new SimpleTaskYieldInstruction(this);
+        public CustomYieldInstruction WaitForCompletion() => new UITaskTYieldInstruction(this);
 
         /// <summary>
         /// 隐式转换为 CustomYieldInstruction（直接 yield return task）
         /// </summary>
-        public static implicit operator CustomYieldInstruction(SimpleTask<T> task) {
+        public static implicit operator CustomYieldInstruction(UITask<T> task) {
             return task?.WaitForCompletion() ?? throw new ArgumentNullException(nameof(task));
         }
 
         /// <summary>
         /// 协程等待指令实现（复用逻辑，无冗余）
         /// </summary>
-        private class SimpleTaskYieldInstruction : CustomYieldInstruction
+        private class UITaskTYieldInstruction : CustomYieldInstruction
         {
-            private readonly SimpleTask<T> _task;
+            private readonly UITask<T> _task;
 
-            public SimpleTaskYieldInstruction(SimpleTask<T> task) {
+            public UITaskTYieldInstruction(UITask<T> task) {
                 _task = task ?? throw new ArgumentNullException(nameof(task));
             }
 
@@ -524,7 +524,7 @@ namespace RS.Unity3DLib.UISystem
             _continuations.Clear();
 
             foreach (var callback in callbacks) {
-                CoroutineHelper.DispatchToMainThread(() => {
+                UICoroutineHelper.DispatchToMainThread(() => {
                     try {
                         callback?.Invoke();
                     }
@@ -536,7 +536,7 @@ namespace RS.Unity3DLib.UISystem
         }
 
         private void ThrowIfDisposed() {
-            if (_isDisposed) throw new ObjectDisposedException(nameof(SimpleTask<T>),"任务已释放，无法执行操作");
+            if (_isDisposed) throw new ObjectDisposedException(nameof(UITask<T>),"任务已释放，无法执行操作");
         }
         #endregion
 
@@ -561,14 +561,14 @@ namespace RS.Unity3DLib.UISystem
     /// <summary>
     /// 非泛型 SimpleTask 的 Awaiter（适配 await 语法）
     /// </summary>
-    public struct SimpleTaskAwaiter : INotifyCompletion
+    public struct UITaskAwaiter : INotifyCompletion
     {
-        private readonly SimpleTask _task;
+        private readonly UITask _task;
 
         /// <summary>
         /// 创建 Awaiter（内部使用，无需手动创建）
         /// </summary>
-        public SimpleTaskAwaiter(SimpleTask task) {
+        public UITaskAwaiter(UITask task) {
             _task = task ?? throw new ArgumentNullException(nameof(task));
         }
 
@@ -596,14 +596,14 @@ namespace RS.Unity3DLib.UISystem
     /// 泛型 SimpleTask<T> 的 Awaiter（适配 await 语法）
     /// </summary>
     /// <typeparam name="T">返回值类型</typeparam>
-    public struct SimpleTaskAwaiter<T> : INotifyCompletion
+    public struct UITaskAwaiter<T> : INotifyCompletion
     {
-        private readonly SimpleTask<T> _task;
+        private readonly UITask<T> _task;
 
         /// <summary>
         /// 创建 Awaiter（内部使用，无需手动创建）
         /// </summary>
-        public SimpleTaskAwaiter(SimpleTask<T> task) {
+        public UITaskAwaiter(UITask<T> task) {
             _task = task ?? throw new ArgumentNullException(nameof(task));
         }
 
@@ -630,15 +630,15 @@ namespace RS.Unity3DLib.UISystem
     /// </summary>
     public static class SimpleTaskExtensions
     {
-
+#if !UNITY_WEBGL
         // 这些方法在 WebGL 中不可用，因为它们使用了多线程
         /// <summary>
         /// 将 Task 转换为 SimpleTask（兼容现有 Task 代码）
         /// </summary>
-        public static SimpleTask ToSimpleTask(this System.Threading.Tasks.Task task) {
+        public static UITask ToSimpleTask(this System.Threading.Tasks.Task task) {
             if (task == null) throw new ArgumentNullException(nameof(task));
 
-            var simpleTask = SimpleTask.Create();
+            var simpleTask = UITask.Create();
             task.ContinueWith(t => {
                 if (t.IsFaulted) {
                     simpleTask.SetException(t.Exception == null ? new InvalidOperationException("Task 执行失败") : t.Exception);
@@ -653,10 +653,10 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 将 Task<T> 转换为 SimpleTask<T>（兼容现有 Task 代码）
         /// </summary>
-        public static SimpleTask<T> ToSimpleTask<T>(this System.Threading.Tasks.Task<T> task) {
+        public static UITask<T> ToSimpleTask<T>(this System.Threading.Tasks.Task<T> task) {
             if (task == null) throw new ArgumentNullException(nameof(task));
 
-            var simpleTask = SimpleTask<T>.Create();
+            var simpleTask = UITask<T>.Create();
             task.ContinueWith(t => {
                 if (t.IsFaulted) {
                     simpleTask.SetException(t.Exception == null ? new InvalidOperationException("Task 执行失败") : t.Exception);
@@ -667,12 +667,12 @@ namespace RS.Unity3DLib.UISystem
             },System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
             return simpleTask;
         }
-#if !UNITY_WEBGL
+
         // 这些方法在 WebGL 中不可用，因为它们使用了多线程
         // 使用条件编译确保它们不会在 WebGL 构建中编译
 
         // 将 SimpleTask 转换为 System.Threading.Tasks.Task
-        public static async System.Threading.Tasks.Task AsTask(this SimpleTask simpleTask) {
+        public static async System.Threading.Tasks.Task AsTask(this UITask simpleTask) {
             if (simpleTask == null)
                 throw new ArgumentNullException(nameof(simpleTask));
 
@@ -687,7 +687,7 @@ namespace RS.Unity3DLib.UISystem
         }
 
         // 将 SimpleTask<T> 转换为 System.Threading.Tasks.Task<T>
-        public static async System.Threading.Tasks.Task<T> AsTask<T>(this SimpleTask<T> simpleTask) {
+        public static async System.Threading.Tasks.Task<T> AsTask<T>(this UITask<T> simpleTask) {
             if (simpleTask == null)
                 throw new ArgumentNullException(nameof(simpleTask));
 
@@ -735,12 +735,12 @@ namespace RS.Unity3DLib.UISystem
         //}
 #endif
         // 配置等待（在主线程继续）- WebGL 总是主线程
-        public static SimpleTask ConfigureAwait(this SimpleTask task,bool continueOnCapturedContext = true) {
+        public static UITask ConfigureAwait(this UITask task,bool continueOnCapturedContext = true) {
             // WebGL 中只有主线程，所以总是继续在主线程
             return task;
         }
 
-        public static SimpleTask<T> ConfigureAwait<T>(this SimpleTask<T> task,bool continueOnCapturedContext = true) {
+        public static UITask<T> ConfigureAwait<T>(this UITask<T> task,bool continueOnCapturedContext = true) {
             // WebGL 中只有主线程，所以总是继续在主线程
             return task;
         }
