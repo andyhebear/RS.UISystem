@@ -41,20 +41,37 @@ namespace RS.Unity3DLib.UISystem
         /// <param name="bundleName">AssetBundle包名（仅AssetBundle方式有效）</param>
         /// <param name="onSuccess">加载成功回调（返回预制体）</param>
         /// <param name="onFailed">加载失败回调（返回错误信息）</param>
-        void LoadUIPrefabAsync(string path,string bundleName,Action<GameObject> onSuccess,Action<string> onFailed);
+        void LoadUIPrefabAsync(string path,string packageName,string bundleName,Action<UILoadResult> onComplated);
     }
- 
+  /// <summary>
+    /// 资源加载结果
+    /// </summary>
+    public class UILoadResult
+    {
+        public bool Success { get; set; }
+        public GameObject Prefab { get; set; }
+        public string ErrorMessage { get; set; }
+        public float Progress { get; set; }
+        
+        public UILoadResult(bool success, GameObject prefab = null, string errorMessage = "", float progress = 1f)
+        {
+            Success = success;
+            Prefab = prefab;
+            ErrorMessage = errorMessage;
+            Progress = progress;
+        }
+    }
     /// <summary>
     /// Resources 加载器（内置实现）
     /// </summary>
     internal class ResourcesResourceLoader : IUIResourceLoader
     {
-        public void LoadUIPrefabAsync(string path,string bundleName,Action<GameObject> onSuccess,Action<string> onFailed) {
+        public void LoadUIPrefabAsync(string path,string packageName,string bundleName,Action<UILoadResult> onComplated) {
             // Resources 同步加载（用协程模拟异步回调）
-            StartCoroutine(LoadCoroutine(path,onSuccess,onFailed));
+            StartCoroutine(LoadCoroutine(path, onComplated));
         }
 
-        private IEnumerator LoadCoroutine(string path,Action<GameObject> onSuccess,Action<string> onFailed) {
+        private IEnumerator LoadCoroutine(string path, Action<UILoadResult> onComplated) {
             //yield return null; // 下一帧执行，模拟异步
             string pathNoExtension = System.IO.Path.GetFileNameWithoutExtension(path);
             //Resources.Load加载预设不带扩展符
@@ -62,10 +79,10 @@ namespace RS.Unity3DLib.UISystem
             yield return prefabResult;
             var prefab = prefabResult.asset as GameObject;
             if (prefab != null) {
-                onSuccess?.Invoke(prefab);
+                onComplated?.Invoke(new UILoadResult(true, prefab, string.Empty, 1f));
             }
             else {
-                onFailed?.Invoke($"Resources加载失败，路径：{path}");
+                onComplated?.Invoke(new UILoadResult(false, null, $"Resources加载失败，路径：{path}", 0f));
             }          
         }
 
@@ -95,12 +112,12 @@ namespace RS.Unity3DLib.UISystem
         /// 本地文件路径
         /// </summary>
         /// <param name="path"></param>
+        /// <param name="packageName"></param>
         /// <param name="bundleName"></param>
-        /// <param name="onSuccess"></param>
-        /// <param name="onFailed"></param>
-        public void LoadUIPrefabAsync(string path,string bundleName,Action<GameObject> onSuccess,Action<string> onFailed) {
+        /// <param name="onComplated"></param>
+        public void LoadUIPrefabAsync(string path,string packageName,string bundleName,Action<UILoadResult> onComplated) {
             if (string.IsNullOrEmpty(bundleName)) {
-                onFailed?.Invoke("AssetBundle包名不能为空");
+                onComplated?.Invoke(new UILoadResult(false, null, "AssetBundle包名不能为空", 0f));
                 return;
             }
 
@@ -111,13 +128,13 @@ namespace RS.Unity3DLib.UISystem
                 request.completed += (op) => {
                     var prefab = request.asset as GameObject;
                     if (prefab != null) {
-                        onSuccess?.Invoke(prefab);
+                        onComplated?.Invoke(new UILoadResult(true, prefab, string.Empty, 1f));
                     }
                     else {
-                        onFailed?.Invoke($"从Bundle {bundleName} 加载预制体 {path} 失败");
+                        onComplated?.Invoke(new UILoadResult(false, null, $"从Bundle {bundleName} 加载预制体 {path} 失败", 0f));
                     }
                 };
-            },onFailed);
+            },(error) => onComplated?.Invoke(new UILoadResult(false, null, error, 0f)));
         }
 
         /// <summary>
@@ -171,7 +188,7 @@ namespace RS.Unity3DLib.UISystem
     /// </summary>
     public class AddressablesResourceLoader : IUIResourceLoader
     {
-        public void LoadUIPrefabAsync(string path, string bundleName, Action<GameObject> onSuccess, Action<string> onFailed)
+        public void LoadUIPrefabAsync(string path, string packageName, string bundleName, Action<UILoadResult> onComplated)
         {
             // Addressables 用 path 作为资源标签/路径
             var handle = Addressables.LoadAssetAsync<GameObject>(path);
@@ -180,10 +197,10 @@ namespace RS.Unity3DLib.UISystem
                 switch (op.Status)
                 {
                     case AsyncOperationStatus.Succeeded:
-                        onSuccess?.Invoke(op.Result);
+                        onComplated?.Invoke(new UILoadResult(true, op.Result, string.Empty, 1f));
                         break;
                     case AsyncOperationStatus.Failed:
-                        onFailed?.Invoke($"Addressables加载失败：{op.Exception.Message}");
+                        onComplated?.Invoke(new UILoadResult(false, null, $"Addressables加载失败：{op.Exception.Message}", 0f));
                         break;
                 }
                 // 释放句柄（避免内存泄漏）
@@ -206,12 +223,12 @@ namespace RS.Unity3DLib.UISystem
             _packageName = packageName;
         }
 
-        public void LoadUIPrefabAsync(string path, string bundleName, Action<GameObject> onSuccess, Action<string> onFailed)
+        public void LoadUIPrefabAsync(string path, string packageName, string bundleName, Action<UILoadResult> onComplated)
         {
             var package = YooAssets.GetPackage(_packageName);
             if (package == null)
             {
-                onFailed?.Invoke($"YooAsset包 {_packageName} 未找到");
+                onComplated?.Invoke(new UILoadResult(false, null, $"YooAsset包 {_packageName} 未找到", 0f));
                 return;
             }
 
@@ -221,11 +238,11 @@ namespace RS.Unity3DLib.UISystem
             {
                 if (op.Success)
                 {
-                    onSuccess?.Invoke(op.AssetObject as GameObject);
+                    onComplated?.Invoke(new UILoadResult(true, op.AssetObject as GameObject, string.Empty, 1f));
                 }
                 else
                 {
-                    onFailed?.Invoke($"YooAsset加载失败：{op.Error}");
+                    onComplated?.Invoke(new UILoadResult(false, null, $"YooAsset加载失败：{op.Error}", 0f));
                 }
             };
         }

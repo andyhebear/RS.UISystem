@@ -3,8 +3,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+#if !UNITY_WEBGL
 using System.Threading;
-
+#endif
 namespace RS.Unity3DLib.UISystem
 {
 
@@ -23,7 +24,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 初始化协程宿主（需在主线程调用，建议在游戏启动时执行）
         /// </summary>
-        internal static void Initialize(MonoBehaviour host,int mainThreadId) {
+        internal static void Initialize(MonoBehaviour host,int mainThreadId=0) {
             if (host == null) throw new ArgumentNullException(nameof(host));
             _host = host;
             _mainThreadId = mainThreadId;
@@ -57,7 +58,9 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         public static void DispatchToMainThread(Action action) {
             if (action == null) throw new ArgumentNullException(nameof(action));
-
+#if UNITY_WEBGL
+                action.Invoke();
+#else
             // 已在主线程则直接执行，否则通过协程调度
             if (Thread.CurrentThread.ManagedThreadId == _mainThreadId) {
                 action.Invoke();
@@ -65,6 +68,7 @@ namespace RS.Unity3DLib.UISystem
             else {
                 RunAsync(action);
             }
+#endif
         }
 
         private static IEnumerator DelayedCoroutine(float delay,Action onComplete) {
@@ -107,9 +111,9 @@ namespace RS.Unity3DLib.UISystem
             }
         }
     }
-    #endregion
+#endregion
 
-    #region 非泛型 UITask（基类）
+#region 非泛型 UITask（基类）
     /// <summary>
     /// 无返回值异步任务（支持 await/yield return，兼容 WebGL）
     /// </summary>
@@ -121,16 +125,17 @@ namespace RS.Unity3DLib.UISystem
         public bool IsFaulted => _exception != null;
         /// <summary>任务失败的异常信息</summary>
         public Exception Exception => _exception;
-
+#if !UNITY_WEBGL
         // 线程安全相关：私有锁（防子类篡改）+ volatile 内存可见性
         private readonly object _lockObj = new object();
+#endif
         private volatile bool _isCompleted;
         private volatile Exception _exception;
         // 回调列表（私有，避免外部修改）
         private List<Action> _continuations = new List<Action>();
         private bool _isDisposed;
 
-        #region 静态工厂方法（简化创建）
+#region 静态工厂方法（简化创建）
         /// <summary>
         /// 创建一个空的 SimpleTask（需手动调用 SetCompleted/SetException 结束）
         /// </summary>
@@ -193,15 +198,18 @@ namespace RS.Unity3DLib.UISystem
             task.SetException(ex);
             return task;
         }
-        #endregion
+#endregion
 
-        #region 任务结束方法（公开 API）
+#region 任务结束方法（公开 API）
         /// <summary>
         /// 标记任务正常完成（无返回值）
         /// </summary>
         /// <exception cref="InvalidOperationException">任务已完成或已释放</exception>
         public void SetCompleted() {
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) throw new InvalidOperationException("任务已完成，无法重复标记结束");
 
@@ -218,8 +226,10 @@ namespace RS.Unity3DLib.UISystem
         /// <exception cref="InvalidOperationException">任务已完成或已释放</exception>
         public void SetException(Exception ex) {
             if (ex == null) throw new ArgumentNullException(nameof(ex),"异常信息不能为 null");
-
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) throw new InvalidOperationException("任务已完成，无法重复标记异常");
 
@@ -228,9 +238,9 @@ namespace RS.Unity3DLib.UISystem
                 ExecuteContinuations();
             }
         }
-        #endregion
+#endregion
 
-        #region Await 支持（INotifyCompletion）
+#region Await 支持（INotifyCompletion）
         /// <summary>
         /// 获取 await 所需的 Awaiter
         /// </summary>
@@ -241,8 +251,10 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         internal void OnCompleted(Action continuation) {
             if (continuation == null) throw new ArgumentNullException(nameof(continuation));
-
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) {
                     // 已完成则立即调度到主线程执行（WebGL 安全）
@@ -252,9 +264,9 @@ namespace RS.Unity3DLib.UISystem
                 _continuations.Add(continuation);
             }
         }
-        #endregion
+#endregion
 
-        #region Unity Yield Return 支持
+#region Unity Yield Return 支持
         /// <summary>
         /// 获取协程等待指令（支持 yield return task）
         /// </summary>
@@ -280,9 +292,9 @@ namespace RS.Unity3DLib.UISystem
 
             public override bool keepWaiting => !_task.IsCompleted && !_task.IsFaulted;
         }
-        #endregion
+#endregion
 
-        #region 内部辅助方法
+#region 内部辅助方法
         /// <summary>
         /// 执行所有注册的回调（WebGL 主线程安全）
         /// </summary>
@@ -310,9 +322,9 @@ namespace RS.Unity3DLib.UISystem
         private void ThrowIfDisposed() {
             if (_isDisposed) throw new ObjectDisposedException(nameof(UITask),"任务已释放，无法执行操作");
         }
-        #endregion
+#endregion
 
-        #region IDisposable 实现（内存安全）
+#region IDisposable 实现（内存安全）
         /// <summary>
         /// 释放任务资源（清空回调列表，避免内存泄漏）
         /// </summary>
@@ -324,11 +336,11 @@ namespace RS.Unity3DLib.UISystem
                 _exception = null;
             }
         }
-        #endregion
+#endregion
     }
-    #endregion
+#endregion
 
-    #region 泛型 UITask<T>（有返回值）
+#region 泛型 UITask<T>（有返回值）
     /// <summary>
     /// 有返回值异步任务（支持 await/yield return，兼容 WebGL）
     /// </summary>
@@ -344,7 +356,10 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>任务返回结果（仅任务完成且未失败时可获取）</summary>
         public T Result {
             get {
-                lock (_lockObj) {
+#if !UNITY_WEBGL
+                lock (_lockObj)
+#endif    
+                    {
                     ThrowIfDisposed();
                     if (!_isCompleted) throw new InvalidOperationException("任务未完成，无法获取结果");
                     if (_exception != null) throw new AggregateException("任务执行失败",_exception);
@@ -352,15 +367,16 @@ namespace RS.Unity3DLib.UISystem
                 }
             }
         }
-
+#if !UNITY_WEBGL
         private readonly object _lockObj = new object();
+#endif
         private volatile bool _isCompleted;
         private volatile Exception _exception;
         private T _result;
         private List<Action> _continuations = new List<Action>();
         private bool _isDisposed;
 
-        #region 静态工厂方法（简化创建）
+#region 静态工厂方法（简化创建）
         /// <summary>
         /// 创建一个空的 SimpleTask<T>（需手动调用 SetResult/SetException 结束）
         /// </summary>
@@ -428,16 +444,19 @@ namespace RS.Unity3DLib.UISystem
             task.SetException(ex);
             return task;
         }
-        #endregion
+#endregion
 
-        #region 任务结束方法（公开 API）
+#region 任务结束方法（公开 API）
         /// <summary>
         /// 标记任务正常完成并设置返回结果
         /// </summary>
         /// <param name="value">任务返回结果</param>
         /// <exception cref="InvalidOperationException">任务已完成或已释放</exception>
         public void SetResult(T value) {
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) throw new InvalidOperationException("任务已完成，无法重复设置结果");
 
@@ -455,8 +474,10 @@ namespace RS.Unity3DLib.UISystem
         /// <exception cref="InvalidOperationException">任务已完成或已释放</exception>
         public void SetException(Exception ex) {
             if (ex == null) throw new ArgumentNullException(nameof(ex),"异常信息不能为 null");
-
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) throw new InvalidOperationException("任务已完成，无法重复标记异常");
 
@@ -465,9 +486,9 @@ namespace RS.Unity3DLib.UISystem
                 ExecuteContinuations();
             }
         }
-        #endregion
+#endregion
 
-        #region Await 支持（INotifyCompletion）
+#region Await 支持（INotifyCompletion）
         /// <summary>
         /// 获取 await 所需的 Awaiter
         /// </summary>
@@ -478,8 +499,10 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         internal void OnCompleted(Action continuation) {
             if (continuation == null) throw new ArgumentNullException(nameof(continuation));
-
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 ThrowIfDisposed();
                 if (_isCompleted) {
                     UICoroutineHelper.DispatchToMainThread(continuation);
@@ -488,9 +511,9 @@ namespace RS.Unity3DLib.UISystem
                 _continuations.Add(continuation);
             }
         }
-        #endregion
+#endregion
 
-        #region Unity Yield Return 支持
+#region Unity Yield Return 支持
         /// <summary>
         /// 获取协程等待指令（支持 yield return task）
         /// </summary>
@@ -516,9 +539,9 @@ namespace RS.Unity3DLib.UISystem
 
             public override bool keepWaiting => !_task.IsCompleted && !_task.IsFaulted;
         }
-        #endregion
+#endregion
 
-        #region 内部辅助方法（与非泛型版一致，避免冗余）
+#region 内部辅助方法（与非泛型版一致，避免冗余）
         private void ExecuteContinuations() {
             Action[] callbacks = _continuations.ToArray();
             _continuations.Clear();
@@ -538,14 +561,17 @@ namespace RS.Unity3DLib.UISystem
         private void ThrowIfDisposed() {
             if (_isDisposed) throw new ObjectDisposedException(nameof(UITask<T>),"任务已释放，无法执行操作");
         }
-        #endregion
+#endregion
 
-        #region IDisposable 实现（内存安全）
+#region IDisposable 实现（内存安全）
         /// <summary>
         /// 释放任务资源（清空回调列表，避免内存泄漏）
         /// </summary>
         public void Dispose() {
-            lock (_lockObj) {
+#if !UNITY_WEBGL
+            lock (_lockObj)
+#endif
+                {
                 _isDisposed = true;
                 _continuations?.Clear();
                 _continuations = null;
@@ -553,11 +579,11 @@ namespace RS.Unity3DLib.UISystem
                 _result = default; // 释放值类型引用（引用类型置空）
             }
         }
-        #endregion
+#endregion
     }
-    #endregion
+#endregion
 
-    #region Awaiter 实现（适配 C# await 语法）
+#region Awaiter 实现（适配 C# await 语法）
     /// <summary>
     /// 非泛型 SimpleTask 的 Awaiter（适配 await 语法）
     /// </summary>
@@ -622,13 +648,13 @@ namespace RS.Unity3DLib.UISystem
         /// </summary>
         public void OnCompleted(Action continuation) => _task.OnCompleted(continuation);
     }
-    #endregion
+#endregion
 
-    #region 扩展方法（提升易用性）
+#region 扩展方法（提升易用性）
     /// <summary>
     /// SimpleTask 扩展方法类
     /// </summary>
-    public static class SimpleTaskExtensions
+    public static class UITaskExtensions
     {
 #if !UNITY_WEBGL
         // 这些方法在 WebGL 中不可用，因为它们使用了多线程
@@ -745,7 +771,7 @@ namespace RS.Unity3DLib.UISystem
             return task;
         }
     }
-    #endregion
+#endregion
     //V2改善
     //// 非泛型版本（基类）
     //public class SimpleTask

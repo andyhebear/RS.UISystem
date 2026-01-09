@@ -133,7 +133,8 @@ namespace RS.Unity3DLib.UISystem
         Showing,       // 显示中（执行显示动画过程）
         Shown,         // 已显示（显示动画完成）
         Hiding,        // 隐藏中（执行隐藏动画过程）
-        Destroyed      // 已销毁
+        Destroyed,      // 已销毁
+        Error
     }
     /// <summary>
     /// 遮罩类型

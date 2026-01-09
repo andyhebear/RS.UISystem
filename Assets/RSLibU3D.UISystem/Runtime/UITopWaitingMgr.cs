@@ -176,7 +176,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 显示等待界面遮罩
         /// </summary>
-        public void ShowWaitingMask(string windowId = DEFAULT_WINDOW_ID,Action onClick = null) {
+        public void ShowWaitingMask(string windowId = DEFAULT_WINDOW_ID,string tip="Loading...",Action onClick = null) {
             if (string.IsNullOrEmpty(windowId)) {
                 windowId = DEFAULT_WINDOW_ID;
             }
@@ -204,7 +204,7 @@ namespace RS.Unity3DLib.UISystem
 
                 // 初始化加载文本内容
                 if (loadingData.LoadingText != null) {
-                    loadingData.LoadingText.text = "loading...";
+                    loadingData.LoadingText.text =string.IsNullOrEmpty(tip)? "loading...":tip;
                 }
 
                 // 设置点击事件
@@ -341,7 +341,7 @@ namespace RS.Unity3DLib.UISystem
             }
             else {
                 // 如果没有提供提示文本，可以显示进度百分比
-                loadingData.LoadingText.text = $"加载中... {(int)(progress * 100)}%";
+                loadingData.LoadingText.text = $"Loading... {(int)(progress * 100)}%";
             }
         }
 
@@ -469,8 +469,8 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 显示指定窗口的等待界面
         /// </summary>
-        public static void Show(string windowId = DEFAULT_WINDOW_ID,Action onClick = null) {
-            Instance.ShowWaitingMask(windowId,onClick);
+        public static void Show(string windowId = DEFAULT_WINDOW_ID,string tip="Loading...",Action onClick = null) {
+            Instance.ShowWaitingMask(windowId,tip,onClick);
         }
 
         /// <summary>
@@ -497,7 +497,7 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 更新指定窗口的加载进度和提示文本
         /// </summary>
-        public static void UpdateProgress(float progress,string tip = "",string windowId = DEFAULT_WINDOW_ID) {
+        public static void UpdateProgress(float progress,string tip = "Loading...",string windowId = DEFAULT_WINDOW_ID) {
             Instance.UpdateProgressInternal(progress,tip,windowId);
         }
 

@@ -149,12 +149,37 @@ namespace RS.Unity3DLib.UISystem
                 _screenChangeCoroutine = null;
             }
         }
+#if !UNITY_2019_1_OR_NEWER
+    // 基于设备类型模拟安全区域,兼容unity老板本5.6
+    public static Rect GetSafeArea()
+    {
+        // 根据不同设备类型设置安全区域
+        // 对于iOS设备，顶部通常有20px状态栏，刘海屏可能需要44px
+        float topInset = 0f;
+        float bottomInset = 0f;
+        
+        // 简单的设备检测逻辑
+        if (Application.platform == RuntimePlatform.IPhonePlayer)
+        {
+            // 可以通过屏幕宽高比或设备型号判断是否为刘海屏
+            topInset = 44f; // 假设刘海屏顶部安全距离
+            bottomInset = 34f; // 底部安全距离
+        }
+        
+        return new Rect(0, topInset, Screen.width, Screen.height - topInset - bottomInset);
+    }
+#endif
         /// <summary>
         /// 等待屏幕变化
         /// </summary>
         private System.Collections.IEnumerator WaitForScreenChange() {
             Vector2 lastResolution = new Vector2(Screen.width,Screen.height);
+#if UNITY_2019_1_OR_NEWER
             Rect lastSafeArea = Screen.safeArea;
+           
+#else
+             Rect lastSafeArea = GetSafeArea();
+#endif
             while (true) {
                 yield return new WaitForSeconds(0.5f); // 减少检查间隔，提高响应速度
                 Refresh();

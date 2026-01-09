@@ -45,7 +45,7 @@ namespace RS.Unity3DLib.UISystem
         /// 状态流转：Uninitialized → Loaded
         /// </summary>
         /// <param name="config">界面配置</param>
-        void Init(UIFormConfig config,object data,bool refreshDataWithFromPoolRestore);
+        IEnumerator Init(UIFormConfig config,object data,bool refreshDataWithFromPoolRestore);
 
         /// <summary>
         /// 显示界面（触发显示动画，激活交互）
@@ -189,10 +189,10 @@ namespace RS.Unity3DLib.UISystem
         /// <summary>
         /// 初始化界面（UIManager调用）
         /// </summary>
-        public void Init(UIFormConfig config,object data,bool resetUI) {
+        public IEnumerator Init(UIFormConfig config,object data,bool resetUI) {
             if (CurrentState == UIFormState.Destroyed) {
                 Debug.LogError($"UIForm {config.FormName} 已销毁，无法初始化");
-                return;
+                yield break;
             }
             if (CurrentState != UIFormState.Uninitialized) {
                 Debug.LogWarning($"[{FormName}] 重复初始化，当前状态：{CurrentState}");
@@ -205,8 +205,10 @@ namespace RS.Unity3DLib.UISystem
             InitializeComponents(config);
             // 初始化遮罩（根据配置）
             InitializeMask(config);
-            // 子类初始化
-            OnInitialized(config);
+            
+            // 执行子类异步初始化
+            yield return OnInitializedAsync(config);
+            
             // 初始化状态
             CurrentState = UIFormState.Loaded;
             if (resetUI) {
@@ -214,12 +216,23 @@ namespace RS.Unity3DLib.UISystem
                 OnUIFormReseted(data);
             }
             SubscribeEvents();
+            yield return null;
         }
         /// <summary>
-        /// 初始化,完成后执行SubscribeEvents()
+        /// 子类异步初始化（虚方法，子类可重写，支持耗时操作）
         /// </summary>
-        /// <param name="config"></param>
-        protected abstract void OnInitialized(UIFormConfig config);
+        /// <param name="config">界面配置</param>
+        protected virtual IEnumerator OnInitializedAsync(UIFormConfig config) { 
+            // 默认实现调用原有的同步初始化方法
+            OnInitialized(config);
+            yield return null;
+        }
+        
+        /// <summary>
+        /// 子类初始化（同步版本，保持向后兼容）
+        /// </summary>
+        /// <param name="config">界面配置</param>
+        protected virtual void OnInitialized(UIFormConfig config) { }
         /// <summary>
         /// 数据刷新回调（子类重写，刷新UI显示）
         /// </summary>
